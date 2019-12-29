@@ -54,6 +54,10 @@ pub trait Component: Default + Unpin {
     /// level component.
     type Properties: Clone + Default;
 
+    /// Do any component initialization work you may need to do here. The `scope`
+    /// variable can be used to generate messages that are routed to the component.
+    fn init(&mut self, _scope: Scope<Self>) {}
+
     /// Process a `Component::Message` and update the state accordingly.
     ///
     /// If you've made changes which should be reflected in the UI state, return
@@ -193,6 +197,7 @@ where
                 state,
                 ui_state: Some(ui_state),
                 channel,
+                init_called: false,
             },
             view: initial_view,
             sender: sys_send,
@@ -225,6 +230,7 @@ where
     state: C,
     ui_state: Option<State<C>>,
     channel: Pin<Box<dyn Stream<Item = ComponentMessage<C>>>>,
+    init_called: bool,
 }
 
 impl<C, P> ComponentTask<C, P>
@@ -248,6 +254,11 @@ where
     }
 
     pub(crate) fn process(&mut self, ctx: &mut Context<'_>) -> Poll<()> {
+        if !self.init_called {
+            self.state.init(self.scope.clone());
+            self.init_called = true;
+        }
+
         let mut render = false;
         loop {
             let next = Stream::poll_next(self.channel.as_mut(), ctx);
